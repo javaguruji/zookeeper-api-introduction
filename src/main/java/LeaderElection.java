@@ -23,6 +23,7 @@
  */
 
 import org.apache.zookeeper.*;
+import org.apache.zookeeper.data.Stat;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -30,19 +31,34 @@ import java.util.List;
 
 /**
  * Zookeeper Client Threading Model & Zookeeper Java API
+ * and
+ * Watchers, Triggers and Introduction to Failure Detection
  */
 public class LeaderElection implements Watcher {
     private static final String ZOOKEEPER_ADDRESS = "localhost:2181";
     private static final int SESSION_TIMEOUT = 3000;
+    private static final String TARGET_ZNODE = "/target_znode";
     private ZooKeeper zooKeeper;
 
     public static void main(String[] arg) throws IOException, InterruptedException, KeeperException {
         LeaderElection leaderElection = new LeaderElection();
 
         leaderElection.connectToZookeeper();
+        leaderElection.watchTargetZnode();
         leaderElection.run();
         leaderElection.close();
         System.out.println("Disconnected from Zookeeper, exiting application");
+    }
+
+    private void watchTargetZnode() throws KeeperException, InterruptedException {
+        Stat stat = this.zooKeeper.exists(TARGET_ZNODE, this);
+        if(stat == null){
+            return;
+        }
+        byte[] data = zooKeeper.getData(TARGET_ZNODE, this, stat);
+        List<String> children = zooKeeper.getChildren(TARGET_ZNODE, this);
+        System.out.println("Data : " + new String(data) + ", Children : "+ children);
+
     }
 
     public void connectToZookeeper() throws IOException {
@@ -71,6 +87,24 @@ public class LeaderElection implements Watcher {
                         zooKeeper.notifyAll();
                     }
                 }
+                break;
+            case NodeDeleted:
+                System.out.println(TARGET_ZNODE + " was deleted");
+                break;
+            case NodeCreated:
+                System.out.println(TARGET_ZNODE + " was created");
+                break;
+            case NodeDataChanged:
+                System.out.println(TARGET_ZNODE + " data changed");
+                break;
+            case NodeChildrenChanged:
+                System.out.println(TARGET_ZNODE + " children changed");
+                break;
+        }
+        try {
+            watchTargetZnode();
+        } catch (InterruptedException e) {
+        } catch (KeeperException e) {
         }
     }
 }
